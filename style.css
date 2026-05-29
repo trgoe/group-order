@@ -10,15 +10,11 @@ main {
   margin: auto;
 }
 
-h1, h2 {
-  margin-top: 20px;
-}
-
-.box {
+.box, .item, .summary-row {
   background: white;
   padding: 14px;
   border-radius: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
 }
 
 input {
@@ -39,13 +35,6 @@ button {
   margin: 3px;
 }
 
-.item {
-  background: white;
-  padding: 12px;
-  border-radius: 12px;
-  margin-bottom: 10px;
-}
-
 .item-title {
   font-weight: bold;
   font-size: 17px;
@@ -56,18 +45,12 @@ button {
   margin-top: 4px;
 }
 
-.controls {
-  margin-top: 10px;
-}
-
-.summary-row {
-  background: white;
-  padding: 10px;
-  border-radius: 10px;
-  margin-bottom: 8px;
-}
-
 .small {
   color: #666;
   font-size: 13px;
+}
+
+.qty {
+  font-weight: bold;
+  margin: 0 8px;
 }
