@@ -1,65 +1,58 @@
-let menuItems = JSON.parse(localStorage.getItem("menuItems") || "[]");
-let orders = JSON.parse(localStorage.getItem("orders") || "{}");
+let menuItems = JSON.parse(localStorage.getItem("go_items") || "[]");
+let orders = JSON.parse(localStorage.getItem("go_orders") || "{}");
 
-async function importMenu() {
-  const url = document.getElementById("menuUrl").value.trim();
+// Restore saved name
+document.getElementById("personName").value = localStorage.getItem("go_person") || "";
+document.getElementById("personName").addEventListener("input", () => {
+  localStorage.setItem("go_person", document.getElementById("personName").value.trim());
+  renderItems();
+});
+
+// ─── IMPORT ───────────────────────────────────────────────────────────────────
+
+function importFromPaste() {
+  const text = document.getElementById("pasteArea").value.trim();
   const status = document.getElementById("status");
 
-  if (!url.includes("korpa.ba/partner/")) {
-    status.textContent = "Ubaci validan Korpa partner link.";
+  if (!text || text.length < 100) {
+    setStatus("Zalijepi tekst sa korpa.ba stranice.", true);
     return;
   }
 
-  status.textContent = "Učitavam artikle...";
+  menuItems = parseText(text);
 
-  try {
-    const fixedUrl = url.includes("www.korpa.ba")
-      ? url
-      : url.replace("https://korpa.ba", "https://www.korpa.ba");
-
-    const readerUrl = "https://r.jina.ai/" + fixedUrl;
-    const response = await fetch(readerUrl);
-    const text = await response.text();
-
-    if (!text || !text.includes("KM")) {
-      status.textContent = "Import nije uspio. Reader nije vratio cijene.";
-      console.log(text);
-      return;
-    }
-
-    menuItems = parseKorpaHtml(text);
-
-    if (menuItems.length === 0) {
-      status.textContent = "Stranica je učitana, ali artikli nisu prepoznati.";
-      console.log(text);
-      return;
-    }
-
-    localStorage.setItem("menuItems", JSON.stringify(menuItems));
-    status.textContent = `Učitano artikala: ${menuItems.length}`;
-
-    renderItems();
-    renderSummary();
-
-  } catch (err) {
-    console.error(err);
-    status.textContent = "Greška kod importa preko Jina Reader.";
+  if (menuItems.length === 0) {
+    setStatus("Nisam prepoznao artikle. Provjeri da li si kopirao cijelu stranicu (Ctrl+A, Ctrl+C).", true);
+    return;
   }
+
+  localStorage.setItem("go_items", JSON.stringify(menuItems));
+  setStatus("Učitano artikala: " + menuItems.length, false);
+  document.getElementById("pasteArea").value = "";
+  renderItems();
+  renderSummary();
 }
 
-function parseKorpaHtml(text) {
+// ─── PARSER ───────────────────────────────────────────────────────────────────
+
+function parseText(text) {
   const lines = text
     .replace(/\r/g, "")
     .split("\n")
-    .map(x => cleanText(x))
+    .map(x => x.replace(/\s+/g, " ").replace(/[*#|>]/g, "").trim())
     .filter(Boolean);
 
   const items = [];
+  const priceExact = /^(\d{1,3}([.,]\d{1,2})?)\s*KM$/i;
+  const priceInline = /(\d{1,3}([.,]\d{1,2})?)\s*KM/i;
 
   for (let i = 0; i < lines.length; i++) {
     const name = lines[i];
 
-    const nextLines = [
+    if (!isValidName(name)) continue;
+
+    // Look at next 5 lines for a price
+    const ahead = [
       lines[i + 1] || "",
       lines[i + 2] || "",
       lines[i + 3] || "",
@@ -67,150 +60,112 @@ function parseKorpaHtml(text) {
       lines[i + 5] || ""
     ];
 
-    const priceLine = nextLines.find(x =>
-      /^(\d+|\d+[.,]\d{1,2})\s*KM$/i.test(x) ||
-      /^KM\s*(\d+|\d+[.,]\d{1,2})$/i.test(x)
-    );
-
+    let priceLine = ahead.find(x => priceExact.test(x));
+    if (!priceLine) priceLine = ahead.find(x => priceInline.test(x));
     if (!priceLine) continue;
-    if (!isValidItemName(name)) continue;
 
-    const price = extractPrice(priceLine);
-    if (!price || price <= 0) continue;
+    const priceMatch = priceLine.replace(",", ".").match(/(\d+(\.\d{1,2})?)/);
+    if (!priceMatch) continue;
 
-    const exists = items.some(x => x.name === name && x.price === price);
+    const price = Number(priceMatch[1]);
+    if (!price || price < 0.5 || price > 500) continue;
 
-    if (!exists) {
-      items.push({
-        id: slugify(name + "-" + price),
-        name,
-        price
-      });
+    const id = slugify(name + "-" + price);
+    if (!items.some(x => x.id === id)) {
+      items.push({ id, name, price });
     }
   }
 
   return items;
 }
 
-function isValidItemName(name) {
-  const badWords = [
-    "korpa",
-    "login",
-    "register",
-    "search",
-    "dostava",
-    "korpa.ba",
-    "switch to english",
-    "trenutno nedostupno",
-    "popularno",
-    "kategorije",
-    "minimalna narudžba",
-    "vrijeme dostave",
-    "title:",
-    "url source:",
-    "markdown content:",
-    "menu",
-    "home",
-    "restaurants"
+function isValidName(name) {
+  const bad = [
+    "korpa", "login", "register", "dostava", "switch to english",
+    "nedostupno", "kategorije", "minimalna", "vrijeme", "title:",
+    "url source:", "markdown", "home", "restaurants", "pretraga",
+    "naručivanje", "narudžba", "cookies", "politika", "pratite",
+    "instagram", "facebook", "info@", "tel:", "©", "all rights", "http",
+    "radno vrijeme", "o nama", "kontakt", "uvjeti", "privatnost"
   ];
+  const low = name.toLowerCase();
 
-  const lower = name.toLowerCase();
-
-  if (name.length < 3) return false;
-  if (name.length > 100) return false;
+  if (name.length < 3 || name.length > 100) return false;
   if (/^\d/.test(name)) return false;
-  if (badWords.some(w => lower.includes(w))) return false;
-  if (/^\d+([.,]\d+)?\s*km$/i.test(name)) return false;
-  if (name.startsWith("[")) return false;
+  if (/^\d+([.,]\d+)?\s*KM$/i.test(name)) return false;
+  if (name.startsWith("[") || name.startsWith("(")) return false;
   if (name.includes("http")) return false;
+  if (bad.some(w => low.includes(w))) return false;
 
   return true;
 }
 
-function extractPrice(text) {
-  const match = text.replace(",", ".").match(/(\d+(\.\d{1,2})?)/);
-  return match ? Number(match[1]) : 0;
+// ─── ORDERING ─────────────────────────────────────────────────────────────────
+
+function getPerson() {
+  const p = document.getElementById("personName").value.trim();
+  if (!p) {
+    alert("Prvo upiši ime.");
+    return "";
+  }
+  localStorage.setItem("go_person", p);
+  return p;
 }
+
+function getQty(itemId) {
+  const p = document.getElementById("personName").value.trim();
+  return (p && orders[p] && orders[p][itemId]) ? orders[p][itemId] : 0;
+}
+
+function addItem(itemId) {
+  const p = getPerson();
+  if (!p) return;
+  if (!orders[p]) orders[p] = {};
+  orders[p][itemId] = (orders[p][itemId] || 0) + 1;
+  save();
+}
+
+function removeItem(itemId) {
+  const p = getPerson();
+  if (!p) return;
+  if (!orders[p] || !orders[p][itemId]) return;
+  orders[p][itemId]--;
+  if (orders[p][itemId] <= 0) delete orders[p][itemId];
+  save();
+}
+
+function save() {
+  localStorage.setItem("go_orders", JSON.stringify(orders));
+  renderItems();
+  renderSummary();
+}
+
+// ─── RENDER ───────────────────────────────────────────────────────────────────
 
 function renderItems() {
   const container = document.getElementById("items");
   container.innerHTML = "";
 
   if (menuItems.length === 0) {
-    container.innerHTML = `<div class="box">Nema artikala. Prvo uradi import.</div>`;
+    container.innerHTML = `<p class="empty">Nema artikala. Uradi import.</p>`;
     return;
   }
 
   menuItems.forEach(item => {
+    const qty = getQty(item.id);
     const div = document.createElement("div");
     div.className = "item";
-
     div.innerHTML = `
       <div class="item-title">${escapeHtml(item.name)}</div>
-      <div class="price">${item.price.toFixed(2)} KM</div>
-      <div>
-        <button onclick="removeItem('${item.id}')">-</button>
-        <span class="qty">${getCurrentPersonQty(item.id)}</span>
-        <button onclick="addItem('${item.id}')">+</button>
+      <div class="item-price">${item.price.toFixed(2)} KM</div>
+      <div class="qty-row">
+        <button class="qty-btn" onclick="removeItem('${item.id}')">−</button>
+        <span class="qty-num" id="q-${item.id}">${qty}</span>
+        <button class="qty-btn" onclick="addItem('${item.id}')">+</button>
       </div>
     `;
-
     container.appendChild(div);
   });
-}
-
-function addItem(itemId) {
-  const person = getPerson();
-  if (!person) return;
-
-  if (!orders[person]) orders[person] = {};
-  if (!orders[person][itemId]) orders[person][itemId] = 0;
-
-  orders[person][itemId]++;
-  saveOrders();
-}
-
-function removeItem(itemId) {
-  const person = getPerson();
-  if (!person) return;
-
-  if (!orders[person] || !orders[person][itemId]) return;
-
-  orders[person][itemId]--;
-
-  if (orders[person][itemId] <= 0) {
-    delete orders[person][itemId];
-  }
-
-  saveOrders();
-}
-
-function getPerson() {
-  const person = document.getElementById("personName").value.trim();
-
-  if (!person) {
-    alert("Prvo upiši ime.");
-    return "";
-  }
-
-  localStorage.setItem("personName", person);
-  return person;
-}
-
-function getCurrentPersonQty(itemId) {
-  const person = document.getElementById("personName").value.trim();
-
-  if (!person || !orders[person] || !orders[person][itemId]) {
-    return 0;
-  }
-
-  return orders[person][itemId];
-}
-
-function saveOrders() {
-  localStorage.setItem("orders", JSON.stringify(orders));
-  renderItems();
-  renderSummary();
 }
 
 function renderSummary() {
@@ -224,8 +179,7 @@ function renderSummary() {
     Object.keys(orders[person]).forEach(itemId => {
       const qty = orders[person][itemId];
       const item = menuItems.find(x => x.id === itemId);
-
-      if (!item) return;
+      if (!item || qty <= 0) return;
 
       if (!summary[itemId]) {
         summary[itemId] = {
@@ -237,14 +191,14 @@ function renderSummary() {
       }
 
       summary[itemId].qty += qty;
-      summary[itemId].people.push(`${person}: ${qty}`);
+      summary[itemId].people.push(person + ": " + qty);
     });
   });
 
   const rows = Object.values(summary);
 
   if (rows.length === 0) {
-    container.innerHTML = `<div class="summary-row">Još nema narudžbi.</div>`;
+    container.innerHTML = `<p class="empty">Još nema narudžbi.</p>`;
     return;
   }
 
@@ -254,54 +208,47 @@ function renderSummary() {
 
     const div = document.createElement("div");
     div.className = "summary-row";
-
     div.innerHTML = `
       <b>${escapeHtml(row.name)}</b><br>
-      Količina ukupno: ${row.qty}<br>
-      Cijena: ${row.price.toFixed(2)} KM<br>
-      Ukupno: ${total.toFixed(2)} KM<br>
-      <span class="small">${escapeHtml(row.people.join(", "))}</span>
+      Količina: ${row.qty} &nbsp;·&nbsp; Ukupno: ${total.toFixed(2)} KM<br>
+      <span class="small">${escapeHtml(row.people.join(" · "))}</span>
     `;
-
     container.appendChild(div);
   });
 
   const totalDiv = document.createElement("div");
-  totalDiv.className = "summary-row";
-  totalDiv.innerHTML = `<b>UKUPNO SVE: ${grandTotal.toFixed(2)} KM</b>`;
+  totalDiv.className = "summary-row total";
+  totalDiv.innerHTML = `UKUPNO SVE: <b>${grandTotal.toFixed(2)} KM</b>`;
   container.appendChild(totalDiv);
 }
 
+// ─── CLEAR ────────────────────────────────────────────────────────────────────
+
 function clearOrders() {
-  if (!confirm("Obrisati samo narudžbe?")) return;
-
+  if (!confirm("Obrisati sve narudžbe?")) return;
   orders = {};
-  localStorage.setItem("orders", JSON.stringify(orders));
-
+  localStorage.setItem("go_orders", JSON.stringify(orders));
   renderItems();
   renderSummary();
 }
 
 function clearAll() {
   if (!confirm("Obrisati sve artikle i narudžbe?")) return;
-
   menuItems = [];
   orders = {};
-
-  localStorage.removeItem("menuItems");
-  localStorage.removeItem("orders");
-
+  localStorage.removeItem("go_items");
+  localStorage.removeItem("go_orders");
+  document.getElementById("status").textContent = "";
   renderItems();
   renderSummary();
 }
 
-function cleanText(x) {
-  return x
-    .replace(/\s+/g, " ")
-    .replace(/Image/gi, "")
-    .replace(/#/g, "")
-    .replace(/\*/g, "")
-    .trim();
+// ─── UTILS ────────────────────────────────────────────────────────────────────
+
+function setStatus(msg, isErr) {
+  const el = document.getElementById("status");
+  el.textContent = msg;
+  el.style.color = isErr ? "red" : "green";
 }
 
 function slugify(text) {
@@ -317,24 +264,14 @@ function slugify(text) {
 
 function escapeHtml(text) {
   return String(text)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-document.getElementById("personName").value =
-  localStorage.getItem("personName") || "";
-
-document.getElementById("personName").addEventListener("input", () => {
-  localStorage.setItem(
-    "personName",
-    document.getElementById("personName").value.trim()
-  );
-
-  renderItems();
-});
+// ─── INIT ─────────────────────────────────────────────────────────────────────
 
 renderItems();
 renderSummary();
