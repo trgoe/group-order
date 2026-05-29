@@ -7,27 +7,28 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <main>
-    <h1>Group Order</h1>
+<main>
+  <h1>Group Order</h1>
 
-    <section class="box">
-      <input id="menuUrl" placeholder="Ubaci Korpa partner link..." />
-      <button onclick="importMenu()">Import artikala</button>
-      <button onclick="clearAll()">Reset</button>
-      <p id="status"></p>
-    </section>
+  <section class="box">
+    <input id="menuUrl" placeholder="Ubaci Korpa partner link..." />
+    <button onclick="importMenu()">Import artikala</button>
+    <button onclick="clearOrders()">Obriši narudžbe</button>
+    <button onclick="clearAll()">Reset sve</button>
+    <p id="status"></p>
+  </section>
 
-    <section class="box">
-      <input id="personName" placeholder="Tvoje ime" />
-    </section>
+  <section class="box">
+    <input id="personName" placeholder="Tvoje ime" />
+  </section>
 
-    <h2>Artikli</h2>
-    <div id="items"></div>
+  <h2>Artikli</h2>
+  <div id="items"></div>
 
-    <h2>Ukupno za narudžbu</h2>
-    <div id="summary"></div>
-  </main>
+  <h2>Ukupno za narudžbu</h2>
+  <div id="summary"></div>
+</main>
 
-  <script src="app.js"></script>
+<script src="app.js"></script>
 </body>
 </html>
