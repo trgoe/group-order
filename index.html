@@ -8,27 +8,39 @@
 </head>
 <body>
 <main>
+
   <h1>Group Order</h1>
 
   <section class="box">
-    <input id="menuUrl" placeholder="Ubaci Korpa partner link..." />
-    <button onclick="importMenu()">Import artikala</button>
-    <button onclick="clearOrders()">Obriši narudžbe</button>
-    <button onclick="clearAll()">Reset sve</button>
+    <h2>1. Import menija</h2>
+    <p class="hint">
+      Otvori korpa.ba partner stranicu → <b>Ctrl+A</b> → <b>Ctrl+C</b> → zalijepi ovdje → Import
+    </p>
+    <textarea id="pasteArea" placeholder="Zalijepi tekst sa korpa.ba stranice ovdje..."></textarea>
+    <div class="btn-row">
+      <button onclick="importFromPaste()">Import artikala</button>
+      <button onclick="clearOrders()" class="secondary">Obriši narudžbe</button>
+      <button onclick="clearAll()" class="danger">Reset sve</button>
+    </div>
     <p id="status"></p>
   </section>
 
   <section class="box">
-    <input id="personName" placeholder="Tvoje ime" />
+    <h2>2. Tvoje ime</h2>
+    <input type="text" id="personName" placeholder="Upiši ime..." />
   </section>
 
-  <h2>Artikli</h2>
-  <div id="items"></div>
+  <section class="box">
+    <h2>3. Artikli</h2>
+    <div id="items"></div>
+  </section>
 
-  <h2>Ukupno za narudžbu</h2>
-  <div id="summary"></div>
+  <section class="box">
+    <h2>Ukupna narudžba</h2>
+    <div id="summary"></div>
+  </section>
+
 </main>
-
 <script src="app.js"></script>
 </body>
 </html>
