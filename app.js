@@ -13,37 +13,25 @@ async function importMenu() {
   status.textContent = "Učitavam artikle...";
 
   try {
-    const proxies = [
-      "https://api.allorigins.win/raw?url=" + encodeURIComponent(url),
-      "https://corsproxy.io/?" + encodeURIComponent(url)
-    ];
+    const fixedUrl = url.includes("www.korpa.ba")
+      ? url
+      : url.replace("https://korpa.ba", "https://www.korpa.ba");
 
-    let html = "";
+    const readerUrl = "https://r.jina.ai/" + fixedUrl;
+    const response = await fetch(readerUrl);
+    const text = await response.text();
 
-    for (const proxyUrl of proxies) {
-      try {
-        const response = await fetch(proxyUrl);
-        const temp = await response.text();
-
-        if (temp && temp.length > 1000) {
-          html = temp;
-          break;
-        }
-      } catch (e) {
-        console.log("Proxy failed:", proxyUrl, e);
-      }
-    }
-
-    if (!html) {
-      status.textContent = "Import nije uspio. Proxy blokiran.";
+    if (!text || !text.includes("KM")) {
+      status.textContent = "Import nije uspio. Reader nije vratio cijene.";
+      console.log(text);
       return;
     }
 
-    menuItems = parseKorpaHtml(html);
+    menuItems = parseKorpaHtml(text);
 
     if (menuItems.length === 0) {
-      status.textContent = "HTML je učitan, ali artikli nisu prepoznati.";
-      console.log(html.slice(0, 3000));
+      status.textContent = "Stranica je učitana, ali artikli nisu prepoznati.";
+      console.log(text);
       return;
     }
 
@@ -55,14 +43,12 @@ async function importMenu() {
 
   } catch (err) {
     console.error(err);
-    status.textContent = "Greška kod importa artikala.";
+    status.textContent = "Greška kod importa preko Jina Reader.";
   }
 }
 
-function parseKorpaHtml(html) {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-
-  let textLines = doc.body.innerText
+function parseKorpaHtml(text) {
+  const lines = text
     .replace(/\r/g, "")
     .split("\n")
     .map(x => cleanText(x))
@@ -70,17 +56,18 @@ function parseKorpaHtml(html) {
 
   const items = [];
 
-  for (let i = 0; i < textLines.length; i++) {
-    const name = textLines[i];
+  for (let i = 0; i < lines.length; i++) {
+    const name = lines[i];
 
-    const lookAhead = [
-      textLines[i + 1] || "",
-      textLines[i + 2] || "",
-      textLines[i + 3] || "",
-      textLines[i + 4] || ""
+    const nextLines = [
+      lines[i + 1] || "",
+      lines[i + 2] || "",
+      lines[i + 3] || "",
+      lines[i + 4] || "",
+      lines[i + 5] || ""
     ];
 
-    const priceLine = lookAhead.find(x =>
+    const priceLine = nextLines.find(x =>
       /^(\d+|\d+[.,]\d{1,2})\s*KM$/i.test(x) ||
       /^KM\s*(\d+|\d+[.,]\d{1,2})$/i.test(x)
     );
@@ -89,10 +76,10 @@ function parseKorpaHtml(html) {
     if (!isValidItemName(name)) continue;
 
     const price = extractPrice(priceLine);
-
     if (!price || price <= 0) continue;
 
     const exists = items.some(x => x.name === name && x.price === price);
+
     if (!exists) {
       items.push({
         id: slugify(name + "-" + price),
@@ -118,16 +105,24 @@ function isValidItemName(name) {
     "popularno",
     "kategorije",
     "minimalna narudžba",
-    "vrijeme dostave"
+    "vrijeme dostave",
+    "title:",
+    "url source:",
+    "markdown content:",
+    "menu",
+    "home",
+    "restaurants"
   ];
 
   const lower = name.toLowerCase();
 
   if (name.length < 3) return false;
-  if (name.length > 90) return false;
+  if (name.length > 100) return false;
   if (/^\d/.test(name)) return false;
   if (badWords.some(w => lower.includes(w))) return false;
   if (/^\d+([.,]\d+)?\s*km$/i.test(name)) return false;
+  if (name.startsWith("[")) return false;
+  if (name.includes("http")) return false;
 
   return true;
 }
@@ -204,7 +199,11 @@ function getPerson() {
 
 function getCurrentPersonQty(itemId) {
   const person = document.getElementById("personName").value.trim();
-  if (!person || !orders[person] || !orders[person][itemId]) return 0;
+
+  if (!person || !orders[person] || !orders[person][itemId]) {
+    return 0;
+  }
+
   return orders[person][itemId];
 }
 
@@ -225,6 +224,7 @@ function renderSummary() {
     Object.keys(orders[person]).forEach(itemId => {
       const qty = orders[person][itemId];
       const item = menuItems.find(x => x.id === itemId);
+
       if (!item) return;
 
       if (!summary[itemId]) {
@@ -254,6 +254,7 @@ function renderSummary() {
 
     const div = document.createElement("div");
     div.className = "summary-row";
+
     div.innerHTML = `
       <b>${escapeHtml(row.name)}</b><br>
       Količina ukupno: ${row.qty}<br>
@@ -273,18 +274,23 @@ function renderSummary() {
 
 function clearOrders() {
   if (!confirm("Obrisati samo narudžbe?")) return;
+
   orders = {};
   localStorage.setItem("orders", JSON.stringify(orders));
+
   renderItems();
   renderSummary();
 }
 
 function clearAll() {
   if (!confirm("Obrisati sve artikle i narudžbe?")) return;
+
   menuItems = [];
   orders = {};
+
   localStorage.removeItem("menuItems");
   localStorage.removeItem("orders");
+
   renderItems();
   renderSummary();
 }
@@ -293,6 +299,8 @@ function cleanText(x) {
   return x
     .replace(/\s+/g, " ")
     .replace(/Image/gi, "")
+    .replace(/#/g, "")
+    .replace(/\*/g, "")
     .trim();
 }
 
@@ -320,7 +328,11 @@ document.getElementById("personName").value =
   localStorage.getItem("personName") || "";
 
 document.getElementById("personName").addEventListener("input", () => {
-  localStorage.setItem("personName", document.getElementById("personName").value.trim());
+  localStorage.setItem(
+    "personName",
+    document.getElementById("personName").value.trim()
+  );
+
   renderItems();
 });
 
