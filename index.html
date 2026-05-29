@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="bs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Group Order</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main>
+    <h1>Group Order</h1>
+
+    <section class="box">
+      <input id="menuUrl" placeholder="Ubaci Korpa partner link..." />
+      <button onclick="importMenu()">Import artikala</button>
+      <button onclick="clearAll()">Reset</button>
+      <p id="status"></p>
+    </section>
+
+    <section class="box">
+      <input id="personName" placeholder="Tvoje ime" />
+    </section>
+
+    <h2>Artikli</h2>
+    <div id="items"></div>
+
+    <h2>Ukupno za narudžbu</h2>
+    <div id="summary"></div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
